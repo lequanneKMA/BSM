@@ -109,6 +109,23 @@ func (s *Store) ClearCompletedOrCancelledBookings() {
 	}
 }
 
+func (s *Store) ClearAllBookingsAndResetDrivers() []*models.Driver {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.bookings = make(map[string]*models.Booking)
+
+	updatedDrivers := make([]*models.Driver, 0, len(s.drivers))
+	for _, d := range s.drivers {
+		d.Status = models.DriverStatusIdle
+		d.CurrentBookingID = ""
+		copied := *d
+		updatedDrivers = append(updatedDrivers, &copied)
+	}
+
+	return updatedDrivers
+}
+
 func (s *Store) DeleteDriver(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

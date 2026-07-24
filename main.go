@@ -519,8 +519,8 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	driverCount := 5
-	bookingCount := 5
+	driverCount := 10
+	bookingCount := 15
 
 	if qVal := r.URL.Query().Get("drivers"); qVal != "" {
 		if v, err := strconv.Atoi(qVal); err == nil {
@@ -531,6 +531,13 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 		if v, err := strconv.Atoi(qVal); err == nil {
 			bookingCount = v
 		}
+	}
+
+	if bookingCount > 30 {
+		bookingCount = 30
+	}
+	if driverCount > 20 {
+		driverCount = 20
 	}
 
 	vehicles := []string{"Xe Máy 🛵", "Ô tô 4 chỗ 🚗", "Ô tô 7 chỗ 🚙"}
@@ -662,10 +669,22 @@ func handleAdminClearBookings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	memStore.ClearCompletedOrCancelledBookings()
+	updatedDrivers := memStore.ClearAllBookingsAndResetDrivers()
 	if pgStore != nil {
 		pgStore.ClearOldBookings()
 	}
+
+	for _, d := range updatedDrivers {
+		wsHub.Broadcast(models.WSMessage{
+			Type:    models.WSMsgDriverUpdated,
+			Payload: d,
+		})
+	}
+	wsHub.Broadcast(models.WSMessage{
+		Type:    models.WSMsgStats,
+		Payload: memStore.GetStats(),
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 }

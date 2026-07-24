@@ -25,8 +25,8 @@ function initMap() {
   const hanoiPos = [21.0285, 105.8542];
   map = L.map("map").setView(hanoiPos, 13);
 
-  // Carto Dark Matter High-Tech Map Tiles
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  // Carto Voyager Clean Light Map Tiles
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains: "abcd",
     maxZoom: 19,
@@ -330,16 +330,10 @@ function startDriverMovementAnimation(driverId, pathCoords, bookingId) {
       if (driverMarkers.has(driverId)) {
         driverMarkers.get(driverId).setLatLng([newPos.lat, newPos.lng]);
       }
-
-      fetch(`/api/drivers/${driverId}/position`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: newPos }),
-      }).catch(() => {});
     }
 
     stepIndex++;
-  }, 400);
+  }, 500);
 
   activeMovements.set(movementKey, intervalId);
 }
@@ -855,8 +849,19 @@ function adminClearBookings() {
       bookings.clear();
       bookingMarkers.forEach((g) => map.removeLayer(g));
       bookingMarkers.clear();
-      addLogLine("🧹 [Admin] Đã dọn dẹp sạch toàn bộ cuốc xe cũ!", "info");
+
+      activeMovements.forEach((timerId) => clearInterval(timerId));
+      activeMovements.clear();
+
+      drivers.forEach((d) => {
+        d.status = "IDLE";
+        d.currentBookingId = null;
+        updateDriverMarker(d);
+      });
+
+      addLogLine("🧹 [Admin] Đã dọn dẹp sạch cuốc xe và giải phóng toàn bộ tài xế về Rảnh!", "info");
       requestRenderBookingsList();
+      requestRenderDriversList();
       fetchInfraStatus();
     });
 }
