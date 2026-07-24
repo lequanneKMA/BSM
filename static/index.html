@@ -57,6 +57,9 @@
       <button id="btn-stress-test" class="btn btn-danger btn-pulse">
         <i class="fa-solid fa-bolt"></i> ⚡ Bão Cuốc (Stress Test)
       </button>
+      <button id="btn-admin-center" onclick="openAdminModal()" class="btn btn-primary">
+        <i class="fa-solid fa-shield-halved"></i> 🛡️ Admin Center
+      </button>
     </div>
   </header>
 
@@ -261,8 +264,64 @@
     </div>
   </div>
 
+  <!-- Centralized Admin Command Center Modal -->
+  <div id="admin-modal" class="modal-overlay hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3 class="text-cyan"><i class="fa-solid fa-shield-halved"></i> Trạm Quản Lý & Giám Sát Hạ Tầng Admin</h3>
+        <button id="btn-close-admin-modal" onclick="closeAdminModal()" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="infra-grid">
+          <div class="infra-card">
+            <div class="infra-title"><i class="fa-solid fa-database text-cyan"></i> PostgreSQL 16</div>
+            <div class="infra-status" id="admin-pg-status">🟢 ONLINE (Outbox Active)</div>
+            <div class="infra-detail">Outbox Events: <strong id="admin-outbox-count">0</strong></div>
+          </div>
+          <div class="infra-card">
+            <div class="infra-title"><i class="fa-solid fa-bolt text-yellow"></i> Redis Cluster</div>
+            <div class="infra-status" id="admin-redis-status">🟢 ONLINE (SETNX Lock Active)</div>
+            <div class="infra-detail">Khóa Cooldown 15p: <strong id="admin-cooldown-count">0</strong> keys</div>
+          </div>
+          <div class="infra-card">
+            <div class="infra-title"><i class="fa-solid fa-cubes text-purple"></i> RabbitMQ Broker</div>
+            <div class="infra-status" id="admin-mq-status">🟢 ONLINE (Queue Active)</div>
+            <div class="infra-detail">Exchange: <strong>booking.events</strong></div>
+          </div>
+          <div class="infra-card">
+            <div class="infra-title"><i class="fa-solid fa-arrows-rotate text-green"></i> Reconciliation Cron</div>
+            <div class="infra-status">🟢 ACTIVE (Quét 15s/lượt)</div>
+            <div class="infra-detail">Goroutines ngầm: <strong id="admin-goroutines-count">0</strong></div>
+          </div>
+        </div>
+
+        <h4 style="margin-top: 15px; margin-bottom: 10px; color: #f8fafc;"><i class="fa-solid fa-sliders"></i> Thao Tác Quản Lý & Điều Hành Tập Trung</h4>
+        <div class="admin-actions-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+          <button id="btn-admin-deposit-all" onclick="adminDepositAll()" class="btn btn-secondary">
+            <i class="fa-solid fa-wallet text-green"></i> + Nạp 100,000đ Ví Cho Tất Cả Tài Xế
+          </button>
+          <button id="btn-admin-reset-fatigue" onclick="adminResetFatigue()" class="btn btn-secondary">
+            <i class="fa-solid fa-heart-pulse text-yellow"></i> Reset Mệt Mỏi Lái Xe (Về 0m)
+          </button>
+          <button id="btn-admin-auto-accept-all" onclick="adminAutoAcceptAll()" class="btn btn-secondary">
+            <i class="fa-solid fa-robot text-cyan"></i> Bật Tự Động Nhận Đơn Hàng Loạt
+          </button>
+          <button id="btn-admin-clear-cooldowns" onclick="adminClearCooldowns()" class="btn btn-secondary">
+            <i class="fa-solid fa-unlock"></i> Xóa Tất Cả Khóa Redis Cooldown
+          </button>
+          <button id="btn-admin-clear-bookings" onclick="adminClearBookings()" class="btn btn-secondary">
+            <i class="fa-solid fa-broom"></i> Dọn Dẹp Cuốc Xe Cũ
+          </button>
+          <button id="btn-admin-refresh-status" onclick="fetchInfraStatus()" class="btn btn-primary">
+            <i class="fa-solid fa-rotate-right"></i> Refresh Hạ Tầng Status
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

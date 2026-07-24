@@ -25,8 +25,8 @@ function initMap() {
   const hanoiPos = [21.0285, 105.8542];
   map = L.map("map").setView(hanoiPos, 13);
 
-  // Carto Dark / Voyager Clean Map Tiles
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+  // Carto Dark Matter High-Tech Map Tiles
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains: "abcd",
     maxZoom: 19,
@@ -639,19 +639,34 @@ function openCancelModal(bookingId) {
 }
 
 function initEventListeners() {
+  // Sidebar tab switching
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      const targetTabId = btn.getAttribute("data-tab");
+      if (!targetTabId) return;
+
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-      document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+      document.querySelectorAll(".tab-content").forEach((c) => {
+        c.classList.remove("active");
+        c.classList.add("hidden");
+      });
+
       btn.classList.add("active");
-      const tabId = btn.getAttribute("data-tab");
-      document.getElementById(tabId).classList.add("active");
+      const targetPane = document.getElementById(targetTabId);
+      if (targetPane) {
+        targetPane.classList.remove("hidden");
+        targetPane.classList.add("active");
+      }
     });
   });
 
-  document.getElementById("btn-clear-logs").addEventListener("click", () => {
-    document.getElementById("logs-console").innerHTML = "";
-  });
+  const btnClearLogs = document.getElementById("btn-clear-logs");
+  if (btnClearLogs) {
+    btnClearLogs.addEventListener("click", () => {
+      const logs = document.getElementById("logs-console");
+      if (logs) logs.innerHTML = "";
+    });
+  }
 
   // Dynamic cancel reasons when changing CancelledBy role
   const cancelBySelect = document.getElementById("cancel-by-user");
@@ -662,36 +677,41 @@ function initEventListeners() {
   }
 
   // Modal Cancel Booking Submit
-  document.getElementById("btn-submit-cancel").addEventListener("click", () => {
-    const bookingId = document.getElementById("cancel-booking-id").value;
-    const cancelledBy = document.getElementById("cancel-by-user").value;
-    const reason = document.getElementById("cancel-reason-select").value;
+  const btnSubmitCancel = document.getElementById("btn-submit-cancel");
+  if (btnSubmitCancel) {
+    btnSubmitCancel.addEventListener("click", () => {
+      const bookingId = document.getElementById("cancel-booking-id")?.value;
+      const cancelledBy = document.getElementById("cancel-by-user")?.value;
+      const reason = document.getElementById("cancel-reason-select")?.value;
 
-    fetch(`/api/bookings/${bookingId}/cancel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cancelledBy, reason }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        addLogLine(`🚫 [API Cancel] Hủy cuốc ${bookingId} thành công (Kích hoạt Cooldown 15p Redis)!`, "warn");
-        document.getElementById("cancel-booking-modal").classList.add("hidden");
-      });
-  });
+      if (!bookingId) return;
 
-  document.getElementById("btn-close-cancel-modal").addEventListener("click", () => {
-    document.getElementById("cancel-booking-modal").classList.add("hidden");
+      fetch(`/api/bookings/${bookingId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancelledBy, reason }),
+      })
+        .then((res) => res.json())
+        .then(() => {
+          addLogLine(`🚫 [API Cancel] Hủy cuốc ${bookingId} thành công (Kích hoạt Cooldown 15p Redis)!`, "warn");
+          document.getElementById("cancel-booking-modal")?.classList.add("hidden");
+        });
+    });
+  }
+
+  document.getElementById("btn-close-cancel-modal")?.addEventListener("click", () => {
+    document.getElementById("cancel-booking-modal")?.classList.add("hidden");
   });
-  document.getElementById("btn-dismiss-cancel-modal").addEventListener("click", () => {
-    document.getElementById("cancel-booking-modal").classList.add("hidden");
+  document.getElementById("btn-dismiss-cancel-modal")?.addEventListener("click", () => {
+    document.getElementById("cancel-booking-modal")?.classList.add("hidden");
   });
 
   // Confirm Pickup Booking
-  document.getElementById("btn-confirm-booking").addEventListener("click", () => {
+  document.getElementById("btn-confirm-booking")?.addEventListener("click", () => {
     if (!tempPickupCoords) return;
-    const vehicleType = document.getElementById("pickup-vehicle-type").value;
-    const paymentMethod = document.getElementById("pickup-payment-method").value;
-    const customerTier = document.getElementById("pickup-customer-tier").value;
+    const vehicleType = document.getElementById("pickup-vehicle-type")?.value || document.getElementById("select-vehicle-type")?.value || "Tất cả";
+    const paymentMethod = document.getElementById("select-payment-method")?.value || "CASH";
+    const customerTier = document.getElementById("select-customer-tier")?.value || "REGULAR";
 
     fetch("/api/bookings", {
       method: "POST",
@@ -710,48 +730,52 @@ function initEventListeners() {
       });
   });
 
-  document.getElementById("btn-cancel-pickup").addEventListener("click", () => {
+  document.getElementById("btn-cancel-pickup")?.addEventListener("click", () => {
     clearTempPickup();
   });
 
-  // Edit Driver Submit
-  document.getElementById("edit-driver-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const id = document.getElementById("edit-driver-id").value;
-    const name = document.getElementById("edit-driver-name").value;
-    const vehicle = document.getElementById("edit-driver-vehicle").value;
-    const rating = parseFloat(document.getElementById("edit-driver-rating").value);
-    const acceptance = parseFloat(document.getElementById("edit-driver-acceptance").value);
-    const wallet = parseInt(document.getElementById("edit-driver-wallet").value);
-    const fatigue = parseInt(document.getElementById("edit-driver-fatigue").value);
-    const mode = document.getElementById("edit-driver-botmode").value;
+  // Edit Driver Save Button
+  const btnSaveDriver = document.getElementById("btn-save-driver");
+  if (btnSaveDriver) {
+    btnSaveDriver.addEventListener("click", () => {
+      const id = document.getElementById("edit-driver-id")?.value;
+      const name = document.getElementById("edit-driver-name")?.value;
+      const vehicle = document.getElementById("edit-driver-vehicle")?.value;
+      const rating = parseFloat(document.getElementById("edit-driver-rating")?.value || "5.0");
+      const acceptance = parseFloat(document.getElementById("edit-driver-acceptance")?.value || "100");
+      const wallet = parseInt(document.getElementById("edit-driver-wallet")?.value || "0");
+      const fatigue = parseInt(document.getElementById("edit-driver-fatigue")?.value || "0");
+      const mode = document.getElementById("edit-driver-botmode")?.value || "MANUAL";
 
-    fetch(`/api/drivers/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name,
-        vehicleType: vehicle,
-        rating: rating,
-        acceptanceRate: acceptance,
-        walletBalance: wallet,
-        drivingMinutes: fatigue,
-        autoBotMode: mode,
-      }),
-    }).then(() => {
-      document.getElementById("edit-driver-modal").classList.add("hidden");
+      if (!id) return;
+
+      fetch(`/api/drivers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          vehicleType: vehicle,
+          rating: rating,
+          acceptanceRate: acceptance,
+          walletBalance: wallet,
+          drivingMinutes: fatigue,
+          autoBotMode: mode,
+        }),
+      }).then(() => {
+        document.getElementById("edit-driver-modal")?.classList.add("hidden");
+      });
     });
+  }
+
+  document.getElementById("btn-close-edit-modal")?.addEventListener("click", () => {
+    document.getElementById("edit-driver-modal")?.classList.add("hidden");
+  });
+  document.getElementById("btn-cancel-edit-modal")?.addEventListener("click", () => {
+    document.getElementById("edit-driver-modal")?.classList.add("hidden");
   });
 
-  document.getElementById("btn-close-edit-modal").addEventListener("click", () => {
-    document.getElementById("edit-driver-modal").classList.add("hidden");
-  });
-  document.getElementById("btn-cancel-edit-modal").addEventListener("click", () => {
-    document.getElementById("edit-driver-modal").classList.add("hidden");
-  });
-
-  // Add 5 Drivers Quick Button (Spawns 5 drivers per click and renders immediately on map)
-  document.getElementById("btn-add-driver").addEventListener("click", () => {
+  // Add 5 Drivers Quick Button
+  document.getElementById("btn-add-driver")?.addEventListener("click", () => {
     for (let i = 0; i < 5; i++) {
       fetch("/api/drivers", {
         method: "POST",
@@ -768,8 +792,87 @@ function initEventListeners() {
     addLogLine("🚕 [System] Đã nạp thành công 5 xe tài xế mới lên bản đồ!", "info");
   });
 
-  // Stress Test
-  document.getElementById("btn-stress-test").addEventListener("click", () => {
-    fetch("/api/simulation/stress-test?drivers=10&bookings=15", { method: "POST" });
-  });
+  const btnStressTest = document.getElementById("btn-stress-test");
+  if (btnStressTest) {
+    btnStressTest.addEventListener("click", () => {
+      fetch("/api/simulation/stress-test?drivers=5&bookings=5", { method: "POST" })
+        .then((res) => res.json())
+        .then(() => {
+          addLogLine("⚡ [Stress Test] Đã kích hoạt bão cuốc thử nghiệm!", "warn");
+        });
+    });
+  }
+}
+
+function openAdminModal() {
+  fetchInfraStatus();
+  const modal = document.getElementById("admin-modal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeAdminModal() {
+  const modal = document.getElementById("admin-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function adminDepositAll() {
+  fetch("/api/admin/drivers/deposit-all", { method: "POST" })
+    .then((res) => res.json())
+    .then(() => {
+      addLogLine("💰 [Admin] Đã cộng 100,000đ vào ví cho tất cả tài xế!", "success");
+    });
+}
+
+function adminResetFatigue() {
+  fetch("/api/admin/drivers/reset-fatigue", { method: "POST" })
+    .then((res) => res.json())
+    .then(() => {
+      addLogLine("⏱️ [Admin] Đã reset thời gian mệt mỏi về 0 phút cho tất cả tài xế!", "success");
+    });
+}
+
+function adminAutoAcceptAll() {
+  fetch("/api/admin/drivers/auto-accept-all", { method: "POST" })
+    .then((res) => res.json())
+    .then(() => {
+      addLogLine("⚡ [Admin] Đã bật chế độ Tự Động Nhận Đơn cho toàn bộ tài xế!", "info");
+    });
+}
+
+function adminClearCooldowns() {
+  fetch("/api/admin/clear-cooldowns", { method: "POST" })
+    .then((res) => res.json())
+    .then((data) => {
+      addLogLine(`🔒 [Admin] Đã mở khóa ${data.clearedKeys || 0} Redis Cooldown keys!`, "success");
+      fetchInfraStatus();
+    });
+}
+
+function adminClearBookings() {
+  fetch("/api/admin/clear-bookings", { method: "POST" })
+    .then((res) => res.json())
+    .then(() => {
+      bookings.clear();
+      bookingMarkers.forEach((g) => map.removeLayer(g));
+      bookingMarkers.clear();
+      addLogLine("🧹 [Admin] Đã dọn dẹp sạch toàn bộ cuốc xe cũ!", "info");
+      requestRenderBookingsList();
+      fetchInfraStatus();
+    });
+}
+
+function fetchInfraStatus() {
+  fetch("/api/admin/infra-status")
+    .then((res) => res.json())
+    .then((data) => {
+      document.getElementById("admin-pg-status").innerText = data.postgresStatus ? "🟢 ONLINE (Outbox Table Active)" : "🔴 OFFLINE (In-Memory Fallback)";
+      document.getElementById("admin-outbox-count").innerText = data.outboxEvents || 0;
+      
+      document.getElementById("admin-redis-status").innerText = data.redisStatus ? "🟢 ONLINE (SETNX Lock Active)" : "🔴 OFFLINE (In-Memory Lock)";
+      document.getElementById("admin-cooldown-count").innerText = data.cooldownKeys || 0;
+
+      document.getElementById("admin-mq-status").innerText = data.rabbitmqStatus ? "🟢 ONLINE (Queue Active)" : "🔴 OFFLINE (Direct Channel)";
+      document.getElementById("admin-goroutines-count").innerText = data.goroutines || 0;
+    })
+    .catch(() => {});
 }

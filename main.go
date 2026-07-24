@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -85,6 +87,12 @@ func main() {
 	http.HandleFunc("/api/bookings/", handleBookingAction)
 	http.HandleFunc("/api/simulation/stress-test", handleStressTest)
 	http.HandleFunc("/api/stats", handleStats)
+	http.HandleFunc("/api/admin/infra-status", handleAdminInfraStatus)
+	http.HandleFunc("/api/admin/clear-cooldowns", handleAdminClearCooldowns)
+	http.HandleFunc("/api/admin/clear-bookings", handleAdminClearBookings)
+	http.HandleFunc("/api/admin/drivers/deposit-all", handleAdminDepositAll)
+	http.HandleFunc("/api/admin/drivers/reset-fatigue", handleAdminResetFatigue)
+	http.HandleFunc("/api/admin/drivers/auto-accept-all", handleAdminAutoAcceptAll)
 
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
@@ -369,6 +377,23 @@ func handleDriverAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if len(parts) == 1 && r.Method == http.MethodDelete {
+		driverID := parts[0]
+		deleted := memStore.DeleteDriver(driverID)
+		if deleted {
+			wsHub.Broadcast(models.WSMessage{
+				Type:    models.WSMsgDriverRemoved,
+				Payload: driverID,
+			})
+			wsHub.Broadcast(models.WSMessage{
+				Type:    models.WSMsgStats,
+				Payload: memStore.GetStats(),
+			})
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"success": deleted})
+		return
+	}
+
 	http.Error(w, "Invalid route", http.StatusBadRequest)
 }
 
@@ -494,8 +519,8 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	driverCount := 10
-	bookingCount := 15
+	driverCount := 5
+	bookingCount := 5
 
 	if qVal := r.URL.Query().Get("drivers"); qVal != "" {
 		if v, err := strconv.Atoi(qVal); err == nil {
@@ -508,22 +533,25 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	vehicles := []string{"Xe Máy 🛵", "Ô tô 4 chỗ 🚗", "Ô tô 7 chỗ 🚙"}
+
 	for i := 0; i < driverCount; i++ {
 		driverID := fmt.Sprintf("drv_st_%d", time.Now().UnixNano()%100000+int64(i))
-		botModes := []models.AutoBotMode{models.BotModeAutoAccept, models.BotModeAutoReject, models.BotModeManual}
 		d := models.Driver{
 			ID:   driverID,
-			Name: fmt.Sprintf("Tài xế StressBot #%d 🏎️", i+1),
+			Name: fmt.Sprintf("Tài xế BãoCuốc #%d", i+1),
 			Position: models.Position{
-				Lat: 21.0285 + (rand.Float64()-0.5)*0.04,
-				Lng: 105.8542 + (rand.Float64()-0.5)*0.04,
+				Lat: 21.0285 + (rand.Float64()-0.5)*0.05,
+				Lng: 105.8542 + (rand.Float64()-0.5)*0.05,
 			},
 			Status:         models.DriverStatusIdle,
-			AutoBotMode:    botModes[rand.Intn(len(botModes))],
-			Rating:         4.7,
-			AcceptanceRate: 92.0,
-			TotalTrips:     800,
-			VehicleType:    "Ô tô 4 chỗ 🚗",
+			AutoBotMode:    models.BotModeAutoAccept,
+			Rating:         4.8,
+			AcceptanceRate: 95.0,
+			TotalTrips:     500,
+			VehicleType:    vehicles[rand.Intn(len(vehicles))],
+			WalletBalance:  int64(100000 + rand.Intn(150000)),
+			DrivingMinutes: rand.Intn(100),
 		}
 		created := memStore.AddDriver(d)
 		wsHub.Broadcast(models.WSMessage{
@@ -534,7 +562,7 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		for i := 0; i < bookingCount; i++ {
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(1200 * time.Millisecond)
 			bookingID := fmt.Sprintf("bk_st_%d", time.Now().UnixNano()%100000+int64(i))
 			b := models.Booking{
 				ID:         bookingID,
@@ -547,7 +575,10 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 					Lat: 21.0350 + (rand.Float64()-0.5)*0.04,
 					Lng: 105.8600 + (rand.Float64()-0.5)*0.04,
 				},
-				Status: models.BookingStatusPending,
+				Status:        models.BookingStatusPending,
+				VehicleType:   vehicles[rand.Intn(len(vehicles))],
+				PaymentMethod: "CASH",
+				CustomerTier:  "REGULAR",
 			}
 			created := memStore.AddBooking(b)
 
@@ -575,6 +606,116 @@ func handleStressTest(w http.ResponseWriter, r *http.Request) {
 func handleStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(memStore.GetStats())
+}
+
+func handleAdminInfraStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	pgConn := pgStore != nil
+	redisConn := redisStore != nil
+	mqConn := mqClient != nil
+
+	outboxCount := 0
+	if pgConn {
+		outboxCount = pgStore.GetOutboxCount()
+	}
+
+	cooldownCount := 0
+	if redisConn {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cooldownCount = redisStore.GetActiveCooldownCount(ctx)
+		cancel()
+	}
+
+	resp := map[string]interface{}{
+		"postgresStatus": pgConn,
+		"redisStatus":    redisConn,
+		"rabbitmqStatus": mqConn,
+		"cronActive":     pgConn,
+		"outboxEvents":   outboxCount,
+		"cooldownKeys":   cooldownCount,
+		"totalDrivers":   len(memStore.GetAllDrivers()),
+		"totalBookings":  len(memStore.GetAllBookings()),
+		"goroutines":     runtime.NumGoroutine(),
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+func handleAdminClearCooldowns(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cleared := 0
+	if redisStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cleared = redisStore.ClearAllCooldowns(ctx)
+		cancel()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "clearedKeys": cleared})
+}
+
+func handleAdminClearBookings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	memStore.ClearCompletedOrCancelledBookings()
+	if pgStore != nil {
+		pgStore.ClearOldBookings()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+}
+
+func handleAdminDepositAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	memStore.DepositAllDrivers(100000)
+	for _, d := range memStore.GetAllDrivers() {
+		wsHub.Broadcast(models.WSMessage{
+			Type:    models.WSMsgDriverUpdated,
+			Payload: d,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "deposited": 100000})
+}
+
+func handleAdminResetFatigue(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	memStore.ResetAllDriversFatigue()
+	for _, d := range memStore.GetAllDrivers() {
+		wsHub.Broadcast(models.WSMessage{
+			Type:    models.WSMsgDriverUpdated,
+			Payload: d,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+}
+
+func handleAdminAutoAcceptAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	memStore.SetAllDriversAutoAccept()
+	for _, d := range memStore.GetAllDrivers() {
+		wsHub.Broadcast(models.WSMessage{
+			Type:    models.WSMsgDriverUpdated,
+			Payload: d,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
 }
 
 func startIdlePatrolSimulation() {

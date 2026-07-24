@@ -44,8 +44,17 @@ func NewPGStore(connStr string) (*PGStore, error) {
 
 // ClearOldBookings clears leftover test bookings and outbox events on startup
 func (pg *PGStore) ClearOldBookings() error {
-	_, err := pg.db.Exec(`DELETE FROM outbox; DELETE FROM bookings;`)
+	_, err := pg.db.Exec("TRUNCATE TABLE bookings, outbox RESTART IDENTITY")
 	return err
+}
+
+func (pg *PGStore) GetOutboxCount() int {
+	var count int
+	row := pg.db.QueryRow("SELECT COUNT(*) FROM outbox")
+	if err := row.Scan(&count); err != nil {
+		return 0
+	}
+	return count
 }
 
 // CreateBookingWithOutbox creates booking and outbox event in 1 DB Transaction

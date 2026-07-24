@@ -84,3 +84,20 @@ func (r *RedisStore) GetCustomerCooldownDrivers(ctx context.Context, customerID 
 	}
 	return driverIDs
 }
+
+func (r *RedisStore) GetActiveCooldownCount(ctx context.Context) int {
+	keys, err := r.client.Keys(ctx, "cooldown:cust:*").Result()
+	if err != nil {
+		return 0
+	}
+	return len(keys)
+}
+
+func (r *RedisStore) ClearAllCooldowns(ctx context.Context) int {
+	keys, err := r.client.Keys(ctx, "cooldown:cust:*").Result()
+	if err != nil || len(keys) == 0 {
+		return 0
+	}
+	r.client.Del(ctx, keys...)
+	return len(keys)
+}

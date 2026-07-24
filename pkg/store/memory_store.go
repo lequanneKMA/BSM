@@ -98,16 +98,15 @@ func (s *Store) GetDriver(id string) (*models.Driver, bool) {
 	return &copied, true
 }
 
-func (s *Store) GetAllDrivers() []*models.Driver {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (s *Store) ClearCompletedOrCancelledBookings() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	list := make([]*models.Driver, 0, len(s.drivers))
-	for _, d := range s.drivers {
-		copied := *d
-		list = append(list, &copied)
+	for id, b := range s.bookings {
+		if b.Status == models.BookingStatusCompleted || b.Status == models.BookingStatusCancelled || b.Status == models.BookingStatusFailed {
+			delete(s.bookings, id)
+		}
 	}
-	return list
 }
 
 func (s *Store) DeleteDriver(id string) bool {
@@ -118,6 +117,42 @@ func (s *Store) DeleteDriver(id string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Store) DepositAllDrivers(amount int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, d := range s.drivers {
+		d.WalletBalance += amount
+	}
+}
+
+func (s *Store) ResetAllDriversFatigue() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, d := range s.drivers {
+		d.DrivingMinutes = 0
+	}
+}
+
+func (s *Store) SetAllDriversAutoAccept() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, d := range s.drivers {
+		d.AutoBotMode = models.BotModeAutoAccept
+	}
+}
+
+func (s *Store) GetAllDrivers() []*models.Driver {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	list := make([]*models.Driver, 0, len(s.drivers))
+	for _, d := range s.drivers {
+		copied := *d
+		list = append(list, &copied)
+	}
+	return list
 }
 
 func (s *Store) AddBooking(b models.Booking) *models.Booking {

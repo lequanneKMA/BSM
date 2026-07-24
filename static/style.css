@@ -705,8 +705,44 @@ body {
   border: none;
 }
 
-.leaflet-marker-icon {
-  transition: transform 0.8s ease-out;
+.modal-lg {
+  max-width: 720px;
+}
+
+.infra-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.infra-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.infra-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-color);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.infra-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  margin-bottom: 4px;
+}
+
+.infra-detail {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 @keyframes dash-animation {
