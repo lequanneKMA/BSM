@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BSM Dispatch Engine - Interactive Visual Simulation & Optimization Dashboard</title>
+  <meta name="description" content="BSM Dispatch Engine Interactive Visualizer and Optimization Benchmark Dashboard">
+  <meta property="og:title" content="BSM Dispatch Engine Visualizer">
+  <meta property="og:description" content="Interactive Dispatch Engine Optimization Dashboard for Hanoi Ride-Hailing">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    .skip-to-main { position: absolute; top: -40px; left: 0; background: #38bdf8; color: #090d16; padding: 8px; z-index: 10000; }
+    .skip-to-main:focus { top: 0; }
+    :root {
+      --bg-dark: #090d16;
+      --panel-bg: #0f172a;
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --accent-primary: #38bdf8;
+      --accent-success: #10b981;
+      --accent-warning: #f59e0b;
+      --accent-danger: #ef4444;
+      --accent-teal: #06b6d4;
+      --accent-purple: #a855f7;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+    body { background-color: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; line-height: 1.5; }
+
+    header {
+      background: #090d16;
+      border-bottom: 1px solid var(--panel-border);
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 800; color: var(--accent-primary); display: flex; align-items: center; gap: 8px; }
+    header .status-badge { font-size: 0.85rem; padding: 4px 12px; border-radius: 20px; background: rgba(16, 185, 129, 0.15); color: var(--accent-success); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-success); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { opacity: 0.4; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0.4; transform: scale(0.8); } }
+
+    main { flex: 1; display: grid; grid-template-columns: 380px 1fr 420px; gap: 0; height: calc(100vh - 58px); }
+
+    .sidebar-left, .sidebar-right {
+      background: var(--panel-bg);
+      border-right: 1px solid var(--panel-border);
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .sidebar-right { border-right: none; border-left: 1px solid var(--panel-border); }
+
+    .card {
+      background: rgba(30, 41, 59, 0.4);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .card h2 { font-size: 0.85rem; font-weight: 800; color: var(--accent-primary); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .btn {
+      width: 100%;
+      min-height: 40px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 800;
+      font-size: 0.85rem;
+      cursor: pointer;
+      background: #0284c7;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-secondary { background: rgba(255,255,255,0.06); color: var(--text-main); margin-top: 6px; }
+
+    .scenario-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
+    .scenario-btn {
+      min-height: 38px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #0f172a;
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      font-size: 0.8rem;
+      font-weight: 400;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .scenario-btn.active {
+      border-color: var(--accent-primary);
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-primary);
+      font-weight: 800;
+    }
+
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .metric-box { background: #0f172a; padding: 10px; border-radius: 8px; border: 1px solid var(--panel-border); text-align: center; }
+    .metric-box .val { font-size: 1.2rem; font-weight: 800; color: #f8fafc; margin-top: 2px; }
+    .metric-box .lbl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    #map-container { position: relative; width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; background: #080c14; }
+
+    .legend-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      z-index: 1000;
+      background: #090d16;
+      border: 1px solid var(--panel-border);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      display: flex;
+      gap: 16px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+    .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+    .feed-item {
+      background: #0f172a;
+      border: 1px solid var(--panel-border);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      border-left: 4px solid var(--accent-primary);
+    }
+    .feed-item.accepted { border-left-color: var(--accent-success); }
+    .feed-item.cancelled { border-left-color: var(--accent-danger); background: rgba(239, 68, 68, 0.08); }
+    .feed-item.rejected { border-left-color: var(--accent-warning); background: rgba(245, 158, 11, 0.1); }
+    .feed-item.expanded { border-left-color: var(--accent-purple); background: rgba(168, 85, 247, 0.12); }
+
+    .chart-container { height: 170px; position: relative; }
+
+    select {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      background: #0f172a;
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      font-size: 0.85rem;
+    }
+
+    .slider-group { display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem; margin-top: 6px; }
+    .slider-row { display: flex; justify-content: space-between; align-items: center; }
+    .slider-row label { color: var(--text-muted); }
+    .slider-row span { font-weight: 800; color: var(--accent-primary); }
+    input[type=range] { width: 100%; accent-color: var(--accent-primary); }
+
+    .badge-solver {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--accent-primary);
+      border: 1px solid var(--accent-primary);
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-to-main">Bỏ qua đến nội dung chính</a>
+
+  <header>
+    <h1>🚀 BSM Dispatch Engine Visualizer <span id="solver-badge" class="badge-solver">SOLVER: AUCTION (ε=1.0)</span></h1>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <div class="status-badge">
+        <div class="pulse-dot"></div>
+        <span>Thread-Safe Hot-Reload Active</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- LEFT SIDEBAR: Controls & Scenarios -->
+    <div class="sidebar-left">
+      <div class="card">
+        <h2>🎛️ Chọn Thuật Toán</h2>
+        <select id="algo-select">
+          <option value="bsm_nonlinear" selected>🔥 BSM Non-Linear Math Model (algo.md)</option>
+          <option value="linear">⚖️ Linear Weighted Model (Cổ điển)</option>
+          <option value="naive">📍 Naive Proximity Only (Chỉ theo ETA)</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <h2>⚡ Cấu Hình Trọng Số Động (Hot-Reload)</h2>
+        <div class="slider-group">
+          <div class="slider-row">
+            <label for="w1-slider">W1 (Rating Weight):</label>
+            <span id="w1-val">0.50</span>
+          </div>
+          <input type="range" id="w1-slider" min="0.1" max="0.8" step="0.05" value="0.50" oninput="updateWeights()">
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-row">
+            <label for="w2-slider">W2 (AR Weight):</label>
+            <span id="w2-val">0.25</span>
+          </div>
+          <input type="range" id="w2-slider" min="0.1" max="0.8" step="0.05" value="0.25" oninput="updateWeights()">
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-row">
+            <label for="w3-slider">W3 (CoR Weight):</label>
+            <span id="w3-val">0.25</span>
+          </div>
+          <input type="range" id="w3-slider" min="0.1" max="0.8" step="0.05" value="0.25" oninput="updateWeights()">
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-row">
+            <label for="alpha-slider">Alpha (ETA Decay Rate):</label>
+            <span id="alpha-val">0.0025</span>
+          </div>
+          <input type="range" id="alpha-slider" min="0.001" max="0.010" step="0.0005" value="0.0025" oninput="updateWeights()">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🎬 Kịch Bản Vận Hành Thực Tế</h2>
+        <div class="scenario-grid">
+          <button id="sc-1" class="scenario-btn active" onclick="selectScenario(1)">
+            <span>🌆 Giờ Thường (Normal Hours)</span>
+            <small>Đông đúc trung tâm (180 xe)</small>
+          </button>
+          <button id="sc-2" class="scenario-btn" onclick="selectScenario(2)">
+            <span>🚗 Giờ Cao Điểm (Peak Hour)</span>
+            <small>Tắc đường Tố Hữu</small>
+          </button>
+          <button id="sc-3" class="scenario-btn" onclick="selectScenario(3)">
+            <span>⛈️ Mưa Cực Đoan + Surge 2.0x</span>
+            <small>Surge Boost & Dynamic Alpha</small>
+          </button>
+          <button id="sc-4" class="scenario-btn" onclick="selectScenario(4)">
+            <span>🏡 Ngoại Thành Mỏng (Sparse Outer)</span>
+            <small>Mật độ xe thấp (15 xe)</small>
+          </button>
+          <button id="sc-5" class="scenario-btn" onclick="selectScenario(5)">
+            <span>💎 Khách Hàng VIP (VIP Trips)</span>
+            <small>Độ ưu tiên cao</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <button id="btn-start" class="btn" onclick="toggleSimulation()">▶️ Bắt Đầu Mô Phỏng Thực Tế</button>
+        <button class="btn btn-secondary" onclick="resetSimulation()">🔄 Đặt Lại Trạng Thái</button>
+      </div>
+    </div>
+
+    <!-- CENTER: Map View -->
+    <div id="map-container">
+      <div id="map"></div>
+      <div class="legend-overlay">
+        <div class="legend-item"><span class="dot" style="background: #10b981;"></span> Tài Xế Rảnh (Idle)</div>
+        <div class="legend-item"><span class="dot" style="background: #ef4444;"></span> Điểm Đón Khách</div>
+        <div class="legend-item"><span class="dot" style="background: #facc15;"></span> Đơn VIP</div>
+        <div class="legend-item"><span class="dot" style="background: #a855f7;"></span> Tín Hiệu Mở Rộng</div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR: Metrics & Feed -->
+    <div class="sidebar-right">
+      <div class="card">
+        <h2>📊 Chỉ Số Hiệu Năng Vận Hành</h2>
+        <div class="metric-grid">
+          <div class="metric-box">
+            <div class="lbl">Tỷ Lệ Nhận (AR)</div>
+            <div id="m-ar" class="val">0%</div>
+          </div>
+          <div class="metric-box">
+            <div class="lbl">Tỷ Lệ Hủy (CR)</div>
+            <div id="m-cr" class="val">0%</div>
+          </div>
+          <div class="metric-box">
+            <div class="lbl">ETA Trung Bình</div>
+            <div id="m-eta" class="val">0s</div>
+          </div>
+          <div class="metric-box">
+            <div class="lbl">Rating Trung Bình</div>
+            <div id="m-rating" class="val">0 ⭐</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📈 So Sánh Tỷ Lệ Đơn Xe</h2>
+        <div class="chart-container">
+          <canvas id="comparisonChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+        <h2>📡 Live Feed (Dispatch Decisions: <span id="feed-count">0</span>)</h2>
+        <div id="feed-list" class="feed-list"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let map;
+    let drivers = [];
+    let driverMarkers = [];
+    let simInterval = null;
+    let isRunning = false;
+    let activeScenario = 1;
+
+    // Weight parameters
+    let W1 = 0.50, W2 = 0.25, W3 = 0.25, Alpha = 0.0025;
+
+    // Metrics counters
+    let totalOrders = 0, acceptedOrders = 0, cancelledOrders = 0, rejectedOrders = 0, radiusExpansions = 0;
+    let totalETA = 0, totalRating = 0;
+
+    const hotspots = [
+      { name: "Sân bay Nội Bài", lat: 21.2187, lng: 105.8042 },
+      { name: "Hồ Hoàn Kiếm", lat: 21.0285, lng: 105.8542 },
+      { name: "Keangnam Landmark", lat: 21.0168, lng: 105.7840 },
+      { name: "Vincom Royal City", lat: 21.0031, lng: 105.8153 },
+      { name: "Vinhomes Ocean Park", lat: 20.9882, lng: 105.9540 }
+    ];
+
+    function updateWeights() {
+      W1 = parseFloat(document.getElementById('w1-slider').value);
+      W2 = parseFloat(document.getElementById('w2-slider').value);
+      W3 = parseFloat(document.getElementById('w3-slider').value);
+      Alpha = parseFloat(document.getElementById('alpha-slider').value);
+
+      document.getElementById('w1-val').innerText = W1.toFixed(2);
+      document.getElementById('w2-val').innerText = W2.toFixed(2);
+      document.getElementById('w3-val').innerText = W3.toFixed(2);
+      document.getElementById('alpha-val').innerText = Alpha.toFixed(3);
+    }
+
+    function initMap() {
+      map = L.map('map').setView([21.0285, 105.8542], 12);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 19
+      }).addTo(map);
+    }
+
+    initMap();
+
+    function initDrivers() {
+      driverMarkers.forEach(m => map.removeLayer(m));
+      driverMarkers = [];
+      drivers = [];
+
+      // High density (180 drivers clustered near hotspots) vs Sparse (15 drivers)
+      const count = activeScenario === 4 ? 15 : 180;
+
+      for (let i = 1; i <= count; i++) {
+        const hs = hotspots[i % hotspots.length];
+        // Radius cluster around hotspots: ~1.5km
+        const lat = hs.lat + ((Math.random() - 0.5) * 0.025);
+        const lng = hs.lng + ((Math.random() - 0.5) * 0.025);
+
+        const d = {
+          id: `DRV-${1000 + i}`,
+          lat: lat,
+          lng: lng,
+          rating: (3.9 + Math.random() * 1.1).toFixed(1),
+          ar: Math.round(70 + Math.random() * 30),
+          cor: Math.round(85 + Math.random() * 15),
+          idleTime: Math.round(Math.random() * 1800),
+          wallet: Math.round(25000 + Math.random() * 75000),
+          barrierCount: Math.floor(Math.random() * 2)
+        };
+
+        const marker = L.circleMarker([lat, lng], {
+          radius: 4,
+          color: '#10b981',
+          fillColor: '#10b981',
+          fillOpacity: 0.8
+        }).addTo(map);
+
+        marker.bindPopup(`<b>${d.id}</b><br>Rating: ${d.rating}⭐ | AR: ${d.ar}% | CoR: ${d.cor}%`);
+        drivers.push(d);
+        driverMarkers.push(marker);
+      }
+    }
+
+    initDrivers();
+
+    const ctx = document.getElementById('comparisonChart').getContext('2d');
+    const compChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['Nhận Đơn (AR)', 'Hủy Đơn (CR)', 'Từ Chối / Radius Expand'],
+        datasets: [{
+          label: 'Tỷ lệ (%)',
+          data: [0, 0, 0],
+          backgroundColor: ['rgba(16, 185, 129, 0.85)', 'rgba(239, 68, 68, 0.85)', 'rgba(168, 85, 247, 0.85)'],
+          borderColor: ['#10b981', '#ef4444', '#a855f7'],
+          borderWidth: 1.5,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, max: 100, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.06)' } },
+          x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+        }
+      }
+    });
+
+    function selectScenario(num) {
+      activeScenario = num;
+      for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById(`sc-${i}`);
+        if (i === num) el.classList.add('active');
+        else el.classList.remove('active');
+      }
+      resetSimulation();
+    }
+
+    function toggleSimulation() {
+      const btn = document.getElementById('btn-start');
+      if (isRunning) {
+        clearInterval(simInterval);
+        isRunning = false;
+        btn.innerHTML = '▶️ Bắt Đầu Mô Phỏng Thực Tế';
+      } else {
+        isRunning = true;
+        btn.innerHTML = '⏸️ Tạm Dừng Mô Phỏng';
+        simInterval = setInterval(simulateRandomOrder, 1400);
+      }
+    }
+
+    function resetSimulation() {
+      if (isRunning) toggleSimulation();
+      initDrivers();
+      totalOrders = 0; acceptedOrders = 0; cancelledOrders = 0; rejectedOrders = 0; radiusExpansions = 0;
+      totalETA = 0; totalRating = 0;
+      document.getElementById('feed-list').innerHTML = '';
+      document.getElementById('feed-count').innerText = '0';
+      document.getElementById('m-ar').innerText = '0%';
+      document.getElementById('m-cr').innerText = '0%';
+      document.getElementById('m-eta').innerText = '0s';
+      document.getElementById('m-rating').innerText = '0 ⭐';
+      compChart.data.datasets[0].data = [0, 0, 0];
+      compChart.update();
+    }
+
+    function simulateRandomOrder() {
+      const hs = hotspots[Math.floor(Math.random() * hotspots.length)];
+      const lat = hs.lat + ((Math.random() - 0.5) * 0.015);
+      const lng = hs.lng + ((Math.random() - 0.5) * 0.015);
+      processOrder(lat, lng, hs.name);
+    }
+
+    function processOrder(pickupLat, pickupLng, addressName) {
+      totalOrders++;
+      const algo = document.getElementById('algo-select').value;
+      const isVIP = activeScenario === 5;
+      const isRain = activeScenario === 3;
+      const attempt = 0;
+
+      // Dynamic Rain & Surge Compensation
+      let activeAlpha = Alpha;
+      let surgeMultiplier = 1.0;
+      if (isRain) {
+        activeAlpha = 0.0015;
+        surgeMultiplier = 2.0;
+      }
+
+      // Strategy Router simulation badge
+      const poolSize = drivers.length;
+      const solverBadge = document.getElementById('solver-badge');
+      if (poolSize <= 30) solverBadge.innerText = 'SOLVER: HUNGARIAN';
+      else if (poolSize <= 200) solverBadge.innerText = 'SOLVER: AUCTION (ε=1.0)';
+      else solverBadge.innerText = 'SOLVER: GREEDY FALLBACK';
+
+      const pickupMarker = L.circleMarker([pickupLat, pickupLng], {
+        radius: isVIP ? 10 : 7,
+        color: isVIP ? '#facc15' : (isRain ? '#38bdf8' : '#ef4444'),
+        fillColor: isVIP ? '#facc15' : (isRain ? '#38bdf8' : '#ef4444'),
+        fillOpacity: 0.9
+      }).addTo(map);
+
+      let bestDriverIdx = -1;
+      let bestScore = -99999;
+      let bestETA = 9999;
+
+      const effectiveMinScore = Math.max(30.0, 60.0 * Math.pow(0.8, attempt));
+
+      drivers.forEach((d, idx) => {
+        // Hard Filter: Cash Wallet < 20,000 VND
+        if (d.wallet < 20000) return;
+
+        const distM = getDistanceMeter(pickupLat, pickupLng, d.lat, d.lng);
+        let speed = 6.9; // 25km/h
+        if (activeScenario === 2) speed = 3.5; // Rush hour traffic
+        if (isRain) speed = 3.8; // Rain speed
+
+        const eta = Math.round(distM / speed);
+
+        let totalScore = 0;
+        if (algo === 'naive') {
+          totalScore = Math.max(0, (1000.0 / (10.0 + eta)) * 10.0);
+        } else if (algo === 'linear') {
+          totalScore = (parseFloat(d.rating) * 20) + (parseFloat(d.ar) * 0.4) - (eta * 0.1);
+        } else {
+          // BSM Non-Linear Math Model (algo.md)
+          const barrierFactor = Math.max(0.4, 1.0 - (0.20 * d.barrierCount));
+          const etaMult = 100.0 / (1.0 + (activeAlpha * eta));
+          const profile = (W1 * Math.pow(parseFloat(d.rating)/5.0, 2)) + (W2 * (d.ar/100.0)) + (W3 * (d.cor/100.0));
+          const coreScore = Math.min(100.0, etaMult * profile * barrierFactor);
+
+          const sAging = Math.min(10.0, 10.0 * (1 - Math.exp(-0.005 * (attempt * 30))));
+          const sIdle = Math.min(7.0, 7.0 * (1 - Math.exp(-0.001 * d.idleTime)));
+          const fareRatio = Math.min(3.0, (50000 * surgeMultiplier) / 50000);
+          const sRevenue = Math.min(3.0, fareRatio * (d.cor / 100.0));
+          const sVip = isVIP ? Math.min(10.0, 10.0 * Math.pow(0.8, attempt)) : 0;
+
+          const boostScore = Math.min(30.0, sAging + sIdle + sRevenue + sVip);
+          totalScore = Math.min(130.0, coreScore + boostScore);
+        }
+
+        if (totalScore >= effectiveMinScore && totalScore > bestScore) {
+          bestScore = totalScore;
+          bestDriverIdx = idx;
+          bestETA = eta;
+        }
+      });
+
+      if (bestDriverIdx !== -1) {
+        const assignedDriver = drivers[bestDriverIdx];
+        const baseAR = parseFloat(assignedDriver.ar) / 100.0;
+
+        let acceptProb = baseAR;
+        if (isRain) acceptProb += 0.10;
+        if (bestETA < 180) acceptProb += 0.15; // Fast pickup boosts accept rate!
+
+        const randVal = Math.random();
+
+        if (randVal < acceptProb) {
+          // ACCEPTED!
+          acceptedOrders++;
+          totalETA += bestETA;
+          totalRating += parseFloat(assignedDriver.rating);
+
+          const polyline = L.polyline([[assignedDriver.lat, assignedDriver.lng], [pickupLat, pickupLng]], {
+            color: isVIP ? '#facc15' : (isRain ? '#38bdf8' : '#10b981'),
+            weight: isVIP ? 4 : 3,
+            dashArray: '6, 8'
+          }).addTo(map);
+
+          driverMarkers[bestDriverIdx].setStyle({ color: '#f59e0b', fillColor: '#f59e0b' });
+
+          setTimeout(() => {
+            map.removeLayer(pickupMarker);
+            map.removeLayer(polyline);
+            driverMarkers[bestDriverIdx].setStyle({ color: '#10b981', fillColor: '#10b981' });
+          }, 1800);
+
+          addFeedItem(totalOrders, assignedDriver.id, addressName, bestETA, assignedDriver.rating, 'accepted', isVIP, false, 0);
+        } else {
+          // CANCELLED BY DRIVER AFTER MATCH!
+          cancelledOrders++;
+          driverMarkers[bestDriverIdx].setStyle({ color: '#ef4444', fillColor: '#ef4444' });
+
+          setTimeout(() => {
+            map.removeLayer(pickupMarker);
+            driverMarkers[bestDriverIdx].setStyle({ color: '#10b981', fillColor: '#10b981' });
+          }, 1500);
+
+          addFeedItem(totalOrders, assignedDriver.id, addressName, bestETA, assignedDriver.rating, 'cancelled', isVIP, false, 0);
+        }
+      } else {
+        // NO DRIVER SATISFIED MINSCORE -> SIGNAL LOCATION-SVC TO EXPAND RADIUS!
+        rejectedOrders++;
+        radiusExpansions++;
+        const suggestedRadius = Math.min(2000 * Math.pow(1.5, attempt + 1), 10000);
+
+        setTimeout(() => map.removeLayer(pickupMarker), 1200);
+        addFeedItem(totalOrders, 'N/A', addressName, 0, 0, 'expanded', isVIP, true, suggestedRadius);
+      }
+
+      updateMetrics();
+    }
+
+    function addFeedItem(id, driverId, address, eta, rating, outcome, isVIP, shouldExpand, suggestedRadius) {
+      const feed = document.getElementById('feed-list');
+      const item = document.createElement('div');
+
+      let badge = '✅ Bấm Nhận';
+      if (outcome === 'cancelled') badge = '❌ Tài xế Hủy';
+      if (outcome === 'expanded') badge = `📡 MỞ RỘNG BÁN KÍNH → ${suggestedRadius}m`;
+
+      item.className = `feed-item ${outcome} ${isVIP ? 'vip' : ''}`;
+      if (shouldExpand) {
+        item.innerHTML = `<b>${isVIP ? '💎 VIP Đơn #'+id : 'Đơn #'+id}</b> • ${address}<br><span style="color: var(--accent-purple); font-weight: 800;">${badge}</span> (Không có tài xế đạt MinScore)`;
+      } else {
+        item.innerHTML = `<b>${isVIP ? '💎 VIP Đơn #'+id : 'Đơn #'+id}</b> • ${address}<br>${badge}: <b>${driverId}</b> (${rating}⭐) | ETA: <b>${eta}s</b>`;
+      }
+      feed.prepend(item);
+      document.getElementById('feed-count').innerText = totalOrders;
+
+      if (feed.children.length > 15) feed.removeChild(feed.lastChild);
+    }
+
+    function updateMetrics() {
+      if (totalOrders === 0) return;
+      const arPercent = ((acceptedOrders / totalOrders) * 100).toFixed(1);
+      const crPercent = ((cancelledOrders / totalOrders) * 100).toFixed(1);
+      const expandPercent = ((radiusExpansions / totalOrders) * 100).toFixed(1);
+
+      const avgEta = acceptedOrders > 0 ? (totalETA / acceptedOrders).toFixed(1) : 0;
+      const avgRating = acceptedOrders > 0 ? (totalRating / acceptedOrders).toFixed(2) : 0;
+
+      document.getElementById('m-ar').innerText = `${arPercent}%`;
+      document.getElementById('m-cr').innerText = `${crPercent}%`;
+      document.getElementById('m-eta').innerText = `${avgEta}s`;
+      document.getElementById('m-rating').innerText = `${avgRating} ⭐`;
+
+      compChart.data.datasets[0].data = [parseFloat(arPercent), parseFloat(crPercent), parseFloat(expandPercent)];
+      compChart.update();
+    }
+
+    function getDistanceMeter(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+  </script>
+</body>
+</html>
